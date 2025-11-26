@@ -31,3 +31,4 @@ export const uploadToCloudinary = async (file, folder = 'mobishaala/institutes')
 
 export default cloudinary;
 
+

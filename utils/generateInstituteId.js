@@ -13,3 +13,4 @@ export const generateInstituteId = () => {
   return result;
 };
 
+

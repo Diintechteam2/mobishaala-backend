@@ -65,6 +65,22 @@ const instituteContentSchema = new mongoose.Schema({
       answer: String
     }]
   },
+  // Footer Section
+  footer: {
+    quickLinks: [
+      {
+        label: { type: String },
+        href: { type: String }
+      }
+    ],
+    socialLinks: [
+      {
+        platform: { type: String },
+        label: { type: String },
+        url: { type: String }
+      }
+    ]
+  },
   createdAt: {
     type: Date,
     default: Date.now

@@ -36,7 +36,7 @@ router.post('/upload-course-image/:instituteId', authenticateToken, uploadCourse
 router.get('/public/:instituteId', async (req, res) => {
   try {
     let content = await InstituteContent.findOne({ instituteId: req.params.instituteId });
-    
+
     if (!content) {
       // Return empty content structure if doesn't exist
       content = {
@@ -67,8 +67,17 @@ router.get('/public/:instituteId', async (req, res) => {
           title: '',
           subtitle: '',
           faqs: []
+        },
+        footer: {
+          quickLinks: [],
+          socialLinks: []
         }
       };
+    } else {
+      // Ensure footer always exists on public payload
+      const safe = content.toObject();
+      safe.footer = safe.footer || { quickLinks: [], socialLinks: [] };
+      content = safe;
     }
 
     res.json({
@@ -88,7 +97,7 @@ router.get('/public/:instituteId', async (req, res) => {
 router.get('/:instituteId', authenticateToken, async (req, res) => {
   try {
     let content = await InstituteContent.findOne({ instituteId: req.params.instituteId });
-    
+
     if (!content) {
       // Create default content if doesn't exist
       content = new InstituteContent({
@@ -119,14 +128,21 @@ router.get('/:instituteId', authenticateToken, async (req, res) => {
           title: '',
           subtitle: '',
           faqs: []
+        },
+        footer: {
+          quickLinks: [],
+          socialLinks: []
         }
       });
       await content.save();
     }
 
+    const safe = content.toObject();
+    safe.footer = safe.footer || { quickLinks: [], socialLinks: [] };
+
     res.json({
       success: true,
-      data: content
+      data: safe
     });
   } catch (error) {
     console.error('Get content error:', error);
@@ -214,6 +230,13 @@ router.put('/:instituteId', authenticateToken, conditionalUpload, async (req, re
         content.faq = typeof req.body.faq === 'string' ? JSON.parse(req.body.faq) : req.body.faq;
       } catch (e) {
         console.error('Error parsing faq:', e);
+      }
+    }
+    if (req.body.footer) {
+      try {
+        content.footer = typeof req.body.footer === 'string' ? JSON.parse(req.body.footer) : req.body.footer;
+      } catch (e) {
+        console.error('Error parsing footer:', e);
       }
     }
 

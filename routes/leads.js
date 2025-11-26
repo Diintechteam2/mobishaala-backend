@@ -116,3 +116,4 @@ router.get('/:instituteId', authenticateToken, async (req, res) => {
 
 export default router;
 
+

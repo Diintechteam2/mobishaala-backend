@@ -61,13 +61,13 @@ After starting the server, you need to create a user account. You can do this by
 
 **Option 1: Using API (Recommended)**
 ```bash
-curl -X POST http://localhost:5000/api/auth/register \
+curl -X POST https://mobishaala-backend-zcxm.onrender.com /api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@mobishaala.com","password":"your_password"}'
 ```
 
 **Option 2: Using Postman or similar tool**
-- POST request to `http://localhost:5000/api/auth/register`
+- POST request to `https://mobishaala-backend-zcxm.onrender.com /api/auth/register`
 - Body (JSON):
 ```json
 {
@@ -87,7 +87,7 @@ For development with auto-reload:
 npm run dev
 ```
 
-The server will run on `http://localhost:5000`
+The server will run on `https://mobishaala-backend-zcxm.onrender.com `
 
 ## API Endpoints
 
