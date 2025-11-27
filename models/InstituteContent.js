@@ -32,7 +32,8 @@ const instituteContentSchema = new mongoose.Schema({
       discount: { type: Number, default: 0 },
       image: String,
       category: String,
-      language: String,
+      language: { type: String, default: 'Hindi' },
+      mode: { type: String, default: 'Online' },
       phase: String,
       enabled: { type: Boolean, default: true }
     }]
