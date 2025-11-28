@@ -105,19 +105,9 @@ const extractFlatCallbackPayload = (raw = {}) => {
 
   const { CHECKSUMHASH, ...rest } = upperCaseMap;
 
-  const sortedPayload = Object.keys(rest)
-    .sort()
-    .reduce((acc, key) => {
-      acc[key] = rest[key];
-      return acc;
-    }, {});
-
-  const payloadString = JSON.stringify(sortedPayload);
-
   return {
     checksum: CHECKSUMHASH,
     data: rest,
-    payloadString,
   };
 };
 
@@ -299,7 +289,7 @@ router.post('/paytm/callback', async (req, res) => {
 
     if (flatPayload) {
       const isValidChecksum = PaytmChecksum.verifySignature(
-        flatPayload.payloadString,
+        flatPayload.data,
         PAYTM_KEY,
         flatPayload.checksum
       );
