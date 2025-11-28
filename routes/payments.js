@@ -249,17 +249,20 @@ router.post('/paytm/callback', async (req, res) => {
     ensurePaytmEnv();
 
     const normalizedPayload = normalizeCallbackPayload(req.body);
+    const flatPayload = extractFlatCallbackPayload(req.body);
 
     const hasJsonPayload =
       normalizedPayload?.body &&
       normalizedPayload?.head &&
-      (normalizedPayload.body.orderId || normalizedPayload.body.ORDERID) &&
+      (normalizedPayload.body.orderId ||
+        normalizedPayload.body.ORDERID ||
+        normalizedPayload.body.orderid) &&
       normalizedPayload.head.signature;
 
     if (hasJsonPayload) {
       const body = normalizedPayload.body;
       const head = normalizedPayload.head;
-      const orderId = body.orderId || body.ORDERID;
+      const orderId = body.orderId || body.ORDERID || body.orderid;
 
       const isValid = PaytmChecksum.verifySignature(
         JSON.stringify(body),
@@ -294,13 +297,7 @@ router.post('/paytm/callback', async (req, res) => {
       return res.json({ success: true });
     }
 
-    if (!normalizedPayload) {
-      const flatPayload = extractFlatCallbackPayload(req.body);
-      if (!flatPayload) {
-        console.error('Invalid Paytm callback payload', { receivedKeys: Object.keys(req.body || {}) });
-        return res.status(400).json({ success: false, message: 'Invalid callback payload' });
-      }
-
+    if (flatPayload) {
       const isValidChecksum = PaytmChecksum.verifySignature(
         flatPayload.payloadString,
         PAYTM_KEY,
@@ -331,7 +328,6 @@ router.post('/paytm/callback', async (req, res) => {
       return res.json({ success: true });
     }
 
-    // If we reach here, normalizedPayload exists but was missing required keys.
     console.error('Invalid Paytm callback payload', { receivedKeys: Object.keys(req.body || {}) });
     return res.status(400).json({ success: false, message: 'Invalid callback payload' });
   } catch (error) {
