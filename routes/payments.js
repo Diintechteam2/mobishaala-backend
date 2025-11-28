@@ -91,6 +91,23 @@ const normalizeCallbackPayload = (raw) => {
   return null;
 };
 
+const extractFlatCallbackPayload = (raw = {}) => {
+  const upperCaseMap = Object.entries(raw).reduce((acc, [key, value]) => {
+    acc[key.toUpperCase()] = value;
+    return acc;
+  }, {});
+
+  if (!upperCaseMap.ORDERID || !upperCaseMap.CHECKSUMHASH) {
+    return null;
+  }
+
+  const { CHECKSUMHASH, ...rest } = upperCaseMap;
+  return {
+    checksum: CHECKSUMHASH,
+    data: rest,
+  };
+};
+
 const mapPaytmStatus = (resultStatus = '') => {
   if (resultStatus === 'TXN_SUCCESS') return 'paid';
   if (resultStatus === 'PENDING') return 'pending';
@@ -217,14 +234,52 @@ router.post('/order', async (req, res) => {
 router.post('/paytm/callback', async (req, res) => {
   try {
     ensurePaytmEnv();
-    const payload = normalizeCallbackPayload(req.body);
-    const body = payload?.body;
-    const head = payload?.head;
 
+    const normalizedPayload = normalizeCallbackPayload(req.body);
+
+    if (!normalizedPayload) {
+      const flatPayload = extractFlatCallbackPayload(req.body);
+      if (!flatPayload) {
+        console.error('Invalid Paytm callback payload', { receivedKeys: Object.keys(req.body || {}) });
+        return res.status(400).json({ success: false, message: 'Invalid callback payload' });
+      }
+
+      const isValidChecksum = PaytmChecksum.verifySignature(
+        flatPayload.data,
+        PAYTM_KEY,
+        flatPayload.checksum
+      );
+
+      if (!isValidChecksum) {
+        return res.status(400).json({ success: false, message: 'Invalid checksum' });
+      }
+
+      const payment = await Payment.findOne({ orderId: flatPayload.data.ORDERID });
+      if (!payment) {
+        return res.status(404).json({ success: false, message: 'Payment not found' });
+      }
+
+      const newStatus = mapPaytmStatus(flatPayload.data.STATUS);
+      payment.status = newStatus;
+      payment.paytm = {
+        ...payment.paytm,
+        txnId: flatPayload.data.TXNID,
+        bankTxnId: flatPayload.data.BANKTXNID,
+        respCode: flatPayload.data.RESPCODE,
+        respMsg: flatPayload.data.RESPMSG,
+        result: flatPayload.data,
+      };
+      await payment.save();
+
+      return res.json({ success: true });
+    }
+
+    const { body, head } = normalizedPayload;
     if (!body?.orderId || !head?.signature) {
       console.error('Invalid Paytm callback payload', { receivedKeys: Object.keys(req.body || {}) });
       return res.status(400).json({ success: false, message: 'Invalid callback payload' });
     }
+
 
     const isValid = PaytmChecksum.verifySignature(JSON.stringify(body), PAYTM_KEY, head.signature);
     if (!isValid) {
