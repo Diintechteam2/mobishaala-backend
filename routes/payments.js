@@ -91,39 +91,15 @@ const normalizeCallbackPayload = (raw) => {
   return null;
 };
 
-const extractFlatCallbackPayload = (raw = {}) => {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
-
-  const checksum = raw.CHECKSUMHASH || raw.checksumhash;
-  if (!checksum) return null;
-
-  const payloadForChecksum = Object.entries(raw).reduce((acc, [key, value]) => {
-    if (key === 'CHECKSUMHASH' || key === 'checksumhash') {
-      return acc;
-    }
-    acc[key] = typeof value === 'string' ? value.trim() : value;
-    return acc;
-  }, {});
-
-  const normalizedData = Object.entries(payloadForChecksum).reduce((acc, [key, value]) => {
+const normalizeUpperCase = (raw = {}) =>
+  Object.entries(raw).reduce((acc, [key, value]) => {
     if (typeof value === 'string') {
+      acc[key.toUpperCase()] = value;
+    } else {
       acc[key.toUpperCase()] = value;
     }
     return acc;
   }, {});
-
-  if (!normalizedData.ORDERID) {
-    return null;
-  }
-
-  return {
-    checksum,
-    payloadForChecksum,
-    normalizedData,
-  };
-};
 
 const mapPaytmStatus = (resultStatus = '') => {
   if (resultStatus === 'TXN_SUCCESS') return 'paid';
@@ -253,7 +229,6 @@ router.post('/paytm/callback', async (req, res) => {
     ensurePaytmEnv();
 
     const normalizedPayload = normalizeCallbackPayload(req.body);
-    const flatPayload = extractFlatCallbackPayload(req.body);
 
     const hasJsonPayload =
       normalizedPayload?.body &&
@@ -301,35 +276,40 @@ router.post('/paytm/callback', async (req, res) => {
       return res.json({ success: true });
     }
 
-    if (flatPayload) {
-      const isValidChecksum = PaytmChecksum.verifySignature(
-        flatPayload.payloadForChecksum,
-        PAYTM_KEY,
-        flatPayload.checksum
-      );
+    const formPayload =
+      req.body &&
+      (req.body.CHECKSUMHASH || req.body.checksumhash) &&
+      (req.body.ORDERID || req.body.orderId || req.body.orderid)
+        ? req.body
+        : null;
+
+    if (formPayload) {
+      const checksum = formPayload.CHECKSUMHASH || formPayload.checksumhash;
+      const isValidChecksum = PaytmChecksum.verifySignature(formPayload, PAYTM_KEY, checksum);
 
       if (!isValidChecksum) {
         console.error('Invalid Paytm checksum for flat payload', {
-          orderId: flatPayload.normalizedData.ORDERID,
-          payloadKeys: Object.keys(flatPayload.payloadForChecksum),
+          orderId: formPayload.ORDERID || formPayload.orderId,
+          payloadKeys: Object.keys(formPayload || {}),
         });
         return res.status(400).json({ success: false, message: 'Invalid checksum' });
       }
 
-      const payment = await Payment.findOne({ orderId: flatPayload.normalizedData.ORDERID });
+      const normalized = normalizeUpperCase(formPayload);
+      const payment = await Payment.findOne({ orderId: normalized.ORDERID });
       if (!payment) {
         return res.status(404).json({ success: false, message: 'Payment not found' });
       }
 
-      const newStatus = mapPaytmStatus(flatPayload.normalizedData.STATUS);
+      const newStatus = mapPaytmStatus(normalized.STATUS);
       payment.status = newStatus;
       payment.paytm = {
         ...payment.paytm,
-        txnId: flatPayload.normalizedData.TXNID,
-        bankTxnId: flatPayload.normalizedData.BANKTXNID,
-        respCode: flatPayload.normalizedData.RESPCODE,
-        respMsg: flatPayload.normalizedData.RESPMSG,
-        result: flatPayload.normalizedData,
+        txnId: normalized.TXNID,
+        bankTxnId: normalized.BANKTXNID,
+        respCode: normalized.RESPCODE,
+        respMsg: normalized.RESPMSG,
+        result: normalized,
       };
       await payment.save();
 
