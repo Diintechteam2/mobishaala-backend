@@ -93,7 +93,9 @@ const normalizeCallbackPayload = (raw) => {
 
 const extractFlatCallbackPayload = (raw = {}) => {
   const upperCaseMap = Object.entries(raw).reduce((acc, [key, value]) => {
-    acc[key.toUpperCase()] = value;
+    if (typeof value === 'string') {
+      acc[key.toUpperCase()] = value;
+    }
     return acc;
   }, {});
 
@@ -102,9 +104,20 @@ const extractFlatCallbackPayload = (raw = {}) => {
   }
 
   const { CHECKSUMHASH, ...rest } = upperCaseMap;
+
+  const sortedPayload = Object.keys(rest)
+    .sort()
+    .reduce((acc, key) => {
+      acc[key] = rest[key];
+      return acc;
+    }, {});
+
+  const payloadString = JSON.stringify(sortedPayload);
+
   return {
     checksum: CHECKSUMHASH,
     data: rest,
+    payloadString,
   };
 };
 
@@ -289,7 +302,7 @@ router.post('/paytm/callback', async (req, res) => {
       }
 
       const isValidChecksum = PaytmChecksum.verifySignature(
-        flatPayload.data,
+        flatPayload.payloadString,
         PAYTM_KEY,
         flatPayload.checksum
       );
