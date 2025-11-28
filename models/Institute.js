@@ -99,6 +99,12 @@ const instituteSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  paymentSettings: {
+    paytmEnabled: {
+      type: Boolean,
+      default: false
+    }
+  },
   status: {
     type: String,
     enum: ['Draft', 'Active', 'Archived'],

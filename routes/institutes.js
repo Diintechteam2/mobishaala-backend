@@ -262,6 +262,40 @@ router.put('/:id', authenticateToken, uploadFields, async (req, res) => {
   }
 });
 
+// Update payment settings for an institute
+router.patch('/:id/payment-settings', authenticateToken, async (req, res) => {
+  try {
+    const institute = await Institute.findOne({ instituteId: req.params.id });
+
+    if (!institute) {
+      return res.status(404).json({
+        success: false,
+        message: 'Institute not found'
+      });
+    }
+
+    const { paytmEnabled } = req.body;
+
+    institute.paymentSettings = {
+      ...institute.paymentSettings,
+      paytmEnabled: Boolean(paytmEnabled),
+    };
+    await institute.save();
+
+    res.json({
+      success: true,
+      message: 'Payment settings updated',
+      data: institute.paymentSettings,
+    });
+  } catch (error) {
+    console.error('Update payment settings error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Unable to update payment settings',
+    });
+  }
+});
+
 // Delete institute
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {

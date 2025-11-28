@@ -6,6 +6,7 @@ import authRoutes from './routes/auth.js';
 import instituteRoutes from './routes/institutes.js';
 import instituteContentRoutes from './routes/instituteContent.js';
 import leadRoutes from './routes/leads.js';
+import paymentRoutes from './routes/payments.js';
 import inquiryRoutes from './routes/inquiries.js';
 
 dotenv.config();
@@ -23,6 +24,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/institutes', instituteRoutes);
 app.use('/api/institute-content', instituteContentRoutes);
 app.use('/api/leads', leadRoutes);
+app.use('/api/payments', paymentRoutes);
 app.use('/api/inquiries', inquiryRoutes);
 
 // Health check route
