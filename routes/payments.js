@@ -99,9 +99,13 @@ const extractFlatCallbackPayload = (raw = {}) => {
   const checksum = raw.CHECKSUMHASH || raw.checksumhash;
   if (!checksum) return null;
 
-  const payloadForChecksum = { ...raw };
-  delete payloadForChecksum.CHECKSUMHASH;
-  delete payloadForChecksum.checksumhash;
+  const payloadForChecksum = Object.entries(raw).reduce((acc, [key, value]) => {
+    if (key === 'CHECKSUMHASH' || key === 'checksumhash') {
+      return acc;
+    }
+    acc[key] = typeof value === 'string' ? value.trim() : value;
+    return acc;
+  }, {});
 
   const normalizedData = Object.entries(payloadForChecksum).reduce((acc, [key, value]) => {
     if (typeof value === 'string') {
@@ -305,6 +309,10 @@ router.post('/paytm/callback', async (req, res) => {
       );
 
       if (!isValidChecksum) {
+        console.error('Invalid Paytm checksum for flat payload', {
+          orderId: flatPayload.normalizedData.ORDERID,
+          payloadKeys: Object.keys(flatPayload.payloadForChecksum),
+        });
         return res.status(400).json({ success: false, message: 'Invalid checksum' });
       }
 
