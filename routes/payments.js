@@ -228,6 +228,13 @@ router.post('/paytm/callback', async (req, res) => {
   try {
     ensurePaytmEnv();
 
+    console.log('Paytm callback received:', {
+      method: req.method,
+      headers: req.headers['content-type'],
+      bodyKeys: Object.keys(req.body || {}),
+      query: req.query,
+    });
+
     const normalizedPayload = normalizeCallbackPayload(req.body);
 
     const hasJsonPayload =
@@ -256,6 +263,7 @@ router.post('/paytm/callback', async (req, res) => {
 
       const payment = await Payment.findOne({ orderId });
       if (!payment) {
+        console.error('Payment not found for orderId:', orderId);
         return res.status(404).json({ success: false, message: 'Payment not found' });
       }
 
@@ -275,7 +283,8 @@ router.post('/paytm/callback', async (req, res) => {
       };
       await payment.save();
 
-      return res.json({ success: true });
+      console.log('Payment updated successfully:', { orderId, status: newStatus });
+      return res.json({ success: true, orderId, status: newStatus });
     }
 
     const formPayload =
@@ -287,11 +296,12 @@ router.post('/paytm/callback', async (req, res) => {
 
     if (formPayload) {
       const checksum = formPayload.CHECKSUMHASH || formPayload.checksumhash;
+      const orderId = formPayload.ORDERID || formPayload.orderId || formPayload.orderid;
       const isValidChecksum = PaytmChecksum.verifySignature(formPayload, PAYTM_KEY, checksum);
 
       if (!isValidChecksum) {
         console.warn('Paytm callback form checksum invalid, proceeding anyway (debug mode)', {
-          orderId: formPayload.ORDERID || formPayload.orderId,
+          orderId,
           payloadKeys: Object.keys(formPayload || {}),
         });
       }
@@ -299,6 +309,7 @@ router.post('/paytm/callback', async (req, res) => {
       const normalized = normalizeUpperCase(formPayload);
       const payment = await Payment.findOne({ orderId: normalized.ORDERID });
       if (!payment) {
+        console.error('Payment not found for orderId:', normalized.ORDERID);
         return res.status(404).json({ success: false, message: 'Payment not found' });
       }
 
@@ -314,13 +325,31 @@ router.post('/paytm/callback', async (req, res) => {
       };
       await payment.save();
 
-      return res.json({ success: true });
+      console.log('Payment updated successfully:', { orderId: normalized.ORDERID, status: newStatus });
+      return res.json({ success: true, orderId: normalized.ORDERID, status: newStatus });
     }
 
     console.error('Invalid Paytm callback payload', { receivedKeys: Object.keys(req.body || {}) });
     return res.status(400).json({ success: false, message: 'Invalid callback payload' });
   } catch (error) {
     console.error('Paytm callback error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Callback error' });
+  }
+});
+
+// Handle GET requests to callback (some gateways send GET after POST)
+router.get('/paytm/callback', async (req, res) => {
+  try {
+    const { orderId } = req.query;
+    if (orderId) {
+      const payment = await Payment.findOne({ orderId });
+      if (payment) {
+        return res.json({ success: true, orderId, status: payment.status });
+      }
+    }
+    return res.status(404).json({ success: false, message: 'Payment not found' });
+  } catch (error) {
+    console.error('Paytm callback GET error:', error);
     res.status(500).json({ success: false, message: error.message || 'Callback error' });
   }
 });
