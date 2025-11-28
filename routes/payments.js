@@ -92,22 +92,32 @@ const normalizeCallbackPayload = (raw) => {
 };
 
 const extractFlatCallbackPayload = (raw = {}) => {
-  const upperCaseMap = Object.entries(raw).reduce((acc, [key, value]) => {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+
+  const checksum = raw.CHECKSUMHASH || raw.checksumhash;
+  if (!checksum) return null;
+
+  const payloadForChecksum = { ...raw };
+  delete payloadForChecksum.CHECKSUMHASH;
+  delete payloadForChecksum.checksumhash;
+
+  const normalizedData = Object.entries(payloadForChecksum).reduce((acc, [key, value]) => {
     if (typeof value === 'string') {
       acc[key.toUpperCase()] = value;
     }
     return acc;
   }, {});
 
-  if (!upperCaseMap.ORDERID || !upperCaseMap.CHECKSUMHASH) {
+  if (!normalizedData.ORDERID) {
     return null;
   }
 
-  const { CHECKSUMHASH, ...rest } = upperCaseMap;
-
   return {
-    checksum: CHECKSUMHASH,
-    data: rest,
+    checksum,
+    payloadForChecksum,
+    normalizedData,
   };
 };
 
@@ -289,7 +299,7 @@ router.post('/paytm/callback', async (req, res) => {
 
     if (flatPayload) {
       const isValidChecksum = PaytmChecksum.verifySignature(
-        flatPayload.data,
+        flatPayload.payloadForChecksum,
         PAYTM_KEY,
         flatPayload.checksum
       );
@@ -298,20 +308,20 @@ router.post('/paytm/callback', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Invalid checksum' });
       }
 
-      const payment = await Payment.findOne({ orderId: flatPayload.data.ORDERID });
+      const payment = await Payment.findOne({ orderId: flatPayload.normalizedData.ORDERID });
       if (!payment) {
         return res.status(404).json({ success: false, message: 'Payment not found' });
       }
 
-      const newStatus = mapPaytmStatus(flatPayload.data.STATUS);
+      const newStatus = mapPaytmStatus(flatPayload.normalizedData.STATUS);
       payment.status = newStatus;
       payment.paytm = {
         ...payment.paytm,
-        txnId: flatPayload.data.TXNID,
-        bankTxnId: flatPayload.data.BANKTXNID,
-        respCode: flatPayload.data.RESPCODE,
-        respMsg: flatPayload.data.RESPMSG,
-        result: flatPayload.data,
+        txnId: flatPayload.normalizedData.TXNID,
+        bankTxnId: flatPayload.normalizedData.BANKTXNID,
+        respCode: flatPayload.normalizedData.RESPCODE,
+        respMsg: flatPayload.normalizedData.RESPMSG,
+        result: flatPayload.normalizedData,
       };
       await payment.save();
 
