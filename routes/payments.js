@@ -77,6 +77,17 @@ const normalizeCallbackPayload = (raw) => {
     };
   }
 
+  // Handle form-urlencoded payload where fields are flat (e.g., ORDERID, TXNID, CHECKSUMHASH, etc.)
+  const lowerKeyEntries = Object.entries(raw).map(([key, value]) => [key.toLowerCase(), value]);
+  const flatPayload = Object.fromEntries(lowerKeyEntries);
+  if (flatPayload.orderid && flatPayload.checksumhash) {
+    const { checksumhash, ...rest } = flatPayload;
+    return {
+      body: rest,
+      head: { signature: checksumhash },
+    };
+  }
+
   return null;
 };
 
