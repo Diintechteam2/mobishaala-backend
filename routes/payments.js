@@ -13,7 +13,7 @@ const PAYTM_ENV = (process.env.PAYTM_ENVIRONMENT || 'staging').toLowerCase();
 const PAYTM_WEBSITE =
   process.env.PAYTM_WEBSITE ||
   (PAYTM_ENV === 'production' ? 'DEFAULT' : 'WEBSTAGING');
-const APP_BASE_URL = (process.env.APP_BASE_URL || 'http://localhost:5000').replace(/\/$/, '');
+const APP_BASE_URL = (process.env.APP_BASE_URL || 'https://mobishaala-backend-zcxm.onrender.com').replace(/\/$/, '');
 const PAYTM_CALLBACK_URL =
   process.env.PAYTM_CALLBACK_URL || `${APP_BASE_URL}/api/payments/paytm/callback`;
 const PAYTM_HOST =
@@ -23,6 +23,61 @@ const ensurePaytmEnv = () => {
   if (!PAYTM_MID || !PAYTM_KEY) {
     throw new Error('Paytm environment variables are missing');
   }
+};
+
+const normalizeCallbackPayload = (raw) => {
+  if (!raw) return null;
+
+  if (raw.body && raw.head) {
+    return raw;
+  }
+
+  // Some gateways send response as JSON string inside "response" or "BODY"
+  if (typeof raw.response === 'string') {
+    try {
+      const parsed = JSON.parse(raw.response);
+      if (parsed.body && parsed.head) return parsed;
+    } catch (err) {
+      console.warn('Unable to parse Paytm response string', err);
+    }
+  }
+
+  if (typeof raw.body === 'string') {
+    try {
+      const parsedBody = JSON.parse(raw.body);
+      return { head: raw.head || {}, body: parsedBody };
+    } catch (err) {
+      console.warn('Unable to parse Paytm body string', err);
+    }
+  }
+
+  // Paytm can send UPPERCASE keys in form-urlencoded payloads. Normalize them.
+  if (raw.BODY && raw.HEAD) {
+    const normalizeKeys = (obj) =>
+      Object.entries(obj).reduce((acc, [key, value]) => {
+        acc[key.charAt(0).toLowerCase() + key.slice(1)] = value;
+        return acc;
+      }, {});
+
+    const parseOrReturn = (value) => {
+      if (typeof value === 'string') {
+        try {
+          return JSON.parse(value);
+        } catch (err) {
+          console.warn('Unable to parse Paytm section string', err);
+          return null;
+        }
+      }
+      return normalizeKeys(value);
+    };
+
+    return {
+      body: parseOrReturn(raw.BODY),
+      head: parseOrReturn(raw.HEAD),
+    };
+  }
+
+  return null;
 };
 
 const mapPaytmStatus = (resultStatus = '') => {
@@ -151,8 +206,12 @@ router.post('/order', async (req, res) => {
 router.post('/paytm/callback', async (req, res) => {
   try {
     ensurePaytmEnv();
-    const { body, head } = req.body || {};
+    const payload = normalizeCallbackPayload(req.body);
+    const body = payload?.body;
+    const head = payload?.head;
+
     if (!body?.orderId || !head?.signature) {
+      console.error('Invalid Paytm callback payload', { receivedKeys: Object.keys(req.body || {}) });
       return res.status(400).json({ success: false, message: 'Invalid callback payload' });
     }
 
