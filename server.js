@@ -8,6 +8,9 @@ import instituteContentRoutes from './routes/instituteContent.js';
 import leadRoutes from './routes/leads.js';
 import paymentRoutes from './routes/payments.js';
 import inquiryRoutes from './routes/inquiries.js';
+import partnerRoutes from './routes/partners.js';
+import partnersSectionSettingsRoutes from './routes/partnersSectionSettings.js';
+import heroSectionSettingsRoutes from './routes/heroSectionSettings.js';
 
 dotenv.config();
 
@@ -26,6 +29,9 @@ app.use('/api/institute-content', instituteContentRoutes);
 app.use('/api/leads', leadRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/inquiries', inquiryRoutes);
+app.use('/api/partners', partnerRoutes);
+app.use('/api/partners-section-settings', partnersSectionSettingsRoutes);
+app.use('/api/hero-section-settings', heroSectionSettingsRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {

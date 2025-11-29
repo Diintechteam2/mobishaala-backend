@@ -25,10 +25,17 @@ export const uploadFields = upload.fields([
   { name: 'instituteImage', maxCount: 1 },
   { name: 'backgroundImage', maxCount: 1 },
   { name: 'courseImage', maxCount: 1 },
+  { name: 'slideImage_0', maxCount: 1 },
+  { name: 'slideImage_1', maxCount: 1 },
+  { name: 'slideImage_2', maxCount: 1 },
+  { name: 'slideImage_3', maxCount: 1 },
 ]);
 
 // For multiple course images
 export const uploadCourseImage = upload.single('courseImage');
+
+// For partner logo upload
+export const uploadPartnerLogo = upload.single('logo');
 
 export default upload;
 
