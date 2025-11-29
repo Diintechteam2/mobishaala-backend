@@ -277,8 +277,19 @@ router.post('/paytm/callback', async (req, res) => {
       }
 
       const payment = await Payment.findOne({ orderId });
+      
+      // Check if browser request
+      const userAgent = req.headers['user-agent'] || '';
+      const isBrowser = /mozilla|chrome|safari|firefox|edge/i.test(userAgent) && 
+                        !/paytm|curl|postman|insomnia/i.test(userAgent);
+      
       if (!payment) {
         console.error('Payment not found for orderId:', orderId);
+        // If browser, redirect to frontend error page
+        if (isBrowser) {
+          const errorUrl = `${FRONTEND_BASE_URL}/payment-error?orderId=${encodeURIComponent(orderId)}`;
+          return res.redirect(errorUrl);
+        }
         return res.status(404).json({ success: false, message: 'Payment not found' });
       }
 
@@ -308,6 +319,17 @@ router.post('/paytm/callback', async (req, res) => {
       await payment.save();
 
       console.log('Payment updated successfully:', { orderId, status: newStatus });
+      
+      // If this is a browser request (not Paytm server-to-server), redirect to frontend
+      // This works for ALL statuses: paid, failed, pending - user will see proper UI on frontend
+      if (isBrowser) {
+        const redirectUrl = `${FRONTEND_BASE_URL}/institutes/${encodeURIComponent(
+          payment.instituteId
+        )}/checkout/${encodeURIComponent(payment.courseId)}?orderId=${encodeURIComponent(orderId)}`;
+        return res.redirect(redirectUrl);
+      }
+      
+      // Server-to-server callback from Paytm - return JSON
       return res.json({ success: true, orderId, status: newStatus });
     }
 
@@ -331,9 +353,20 @@ router.post('/paytm/callback', async (req, res) => {
       }
 
       const normalized = normalizeUpperCase(formPayload);
+      
+      // Check if browser request
+      const userAgentForm = req.headers['user-agent'] || '';
+      const isBrowserForm = /mozilla|chrome|safari|firefox|edge/i.test(userAgentForm) && 
+                            !/paytm|curl|postman|insomnia/i.test(userAgentForm);
+      
       const payment = await Payment.findOne({ orderId: normalized.ORDERID });
       if (!payment) {
         console.error('Payment not found for orderId:', normalized.ORDERID);
+        // If browser, redirect to frontend error page
+        if (isBrowserForm) {
+          const errorUrl = `${FRONTEND_BASE_URL}/payment-error?orderId=${encodeURIComponent(normalized.ORDERID)}`;
+          return res.redirect(errorUrl);
+        }
         return res.status(404).json({ success: false, message: 'Payment not found' });
       }
 
@@ -350,13 +383,91 @@ router.post('/paytm/callback', async (req, res) => {
       await payment.save();
 
       console.log('Payment updated successfully:', { orderId: normalized.ORDERID, status: newStatus });
+      
+      // If this is a browser request (not Paytm server-to-server), redirect to frontend
+      // This works for ALL statuses: paid, failed, pending - user will see proper UI on frontend
+      if (isBrowserForm) {
+        const redirectUrl = `${FRONTEND_BASE_URL}/institutes/${encodeURIComponent(
+          payment.instituteId
+        )}/checkout/${encodeURIComponent(payment.courseId)}?orderId=${encodeURIComponent(normalized.ORDERID)}`;
+        return res.redirect(redirectUrl);
+      }
+      
+      // Server-to-server callback from Paytm - return JSON
       return res.json({ success: true, orderId: normalized.ORDERID, status: newStatus });
     }
 
+    // Invalid payload case
     console.error('Invalid Paytm callback payload', { receivedKeys: Object.keys(req.body || {}) });
+    
+    // Check if browser request
+    const userAgentInvalid = req.headers['user-agent'] || '';
+    const isBrowserInvalid = /mozilla|chrome|safari|firefox|edge/i.test(userAgentInvalid) && 
+                             !/paytm|curl|postman|insomnia/i.test(userAgentInvalid);
+    
+    // Try to get orderId from query or body for redirect
+    const orderIdFromQuery = req.query?.orderId;
+    const orderIdFromBody = req.body?.ORDERID || req.body?.orderId || req.body?.orderid;
+    const fallbackOrderId = orderIdFromQuery || orderIdFromBody;
+    
+    if (isBrowserInvalid && fallbackOrderId) {
+      // Try to find payment to get institute/course info
+      const fallbackPayment = await Payment.findOne({ orderId: fallbackOrderId });
+      if (fallbackPayment) {
+        const redirectUrl = `${FRONTEND_BASE_URL}/institutes/${encodeURIComponent(
+          fallbackPayment.instituteId
+        )}/checkout/${encodeURIComponent(fallbackPayment.courseId)}?orderId=${encodeURIComponent(fallbackOrderId)}`;
+        return res.redirect(redirectUrl);
+      }
+      // If payment not found, redirect to error page
+      const errorUrl = `${FRONTEND_BASE_URL}/payment-error?orderId=${encodeURIComponent(fallbackOrderId)}`;
+      return res.redirect(errorUrl);
+    }
+    
+    if (isBrowserInvalid) {
+      // No orderId available, redirect to generic error
+      const errorUrl = `${FRONTEND_BASE_URL}/payment-error`;
+      return res.redirect(errorUrl);
+    }
+    
     return res.status(400).json({ success: false, message: 'Invalid callback payload' });
   } catch (error) {
     console.error('Paytm callback error:', error);
+    
+    // Check if browser request
+    const userAgentError = req.headers['user-agent'] || '';
+    const isBrowserError = /mozilla|chrome|safari|firefox|edge/i.test(userAgentError) && 
+                           !/paytm|curl|postman|insomnia/i.test(userAgentError);
+    
+    // Try to get orderId for redirect
+    const orderIdFromQueryError = req.query?.orderId;
+    const orderIdFromBodyError = req.body?.ORDERID || req.body?.orderId || req.body?.orderid;
+    const fallbackOrderIdError = orderIdFromQueryError || orderIdFromBodyError;
+    
+    if (isBrowserError && fallbackOrderIdError) {
+      // Try to find payment to get institute/course info
+      try {
+        const fallbackPayment = await Payment.findOne({ orderId: fallbackOrderIdError });
+        if (fallbackPayment) {
+          const redirectUrl = `${FRONTEND_BASE_URL}/institutes/${encodeURIComponent(
+            fallbackPayment.instituteId
+          )}/checkout/${encodeURIComponent(fallbackPayment.courseId)}?orderId=${encodeURIComponent(fallbackOrderIdError)}`;
+          return res.redirect(redirectUrl);
+        }
+      } catch (dbError) {
+        console.error('Error finding payment for redirect:', dbError);
+      }
+      // If payment not found, redirect to error page
+      const errorUrl = `${FRONTEND_BASE_URL}/payment-error?orderId=${encodeURIComponent(fallbackOrderIdError)}`;
+      return res.redirect(errorUrl);
+    }
+    
+    if (isBrowserError) {
+      // No orderId available, redirect to generic error
+      const errorUrl = `${FRONTEND_BASE_URL}/payment-error`;
+      return res.redirect(errorUrl);
+    }
+    
     res.status(500).json({ success: false, message: error.message || 'Callback error' });
   }
 });
