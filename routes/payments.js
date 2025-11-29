@@ -101,9 +101,23 @@ const normalizeUpperCase = (raw = {}) =>
     return acc;
   }, {});
 
-const mapPaytmStatus = (resultStatus = '') => {
-  if (resultStatus === 'TXN_SUCCESS') return 'paid';
-  if (resultStatus === 'PENDING') return 'pending';
+// Map various Paytm response formats to our internal status
+// Paytm can send:
+// - resultInfo.resultStatus: 'TXN_SUCCESS', 'PENDING', 'TXN_FAILURE', etc.
+// - STATUS: 'TXN_SUCCESS', 'SUCCESS', 'PENDING', etc.
+// - RESPCODE / resultCode: '01' (success), others = failure
+const mapPaytmStatus = (rawStatus = '', rawRespCode = '') => {
+  const status = (rawStatus || '').toString().toUpperCase().trim();
+  const respCode = (rawRespCode || '').toString().trim();
+
+  // Treat all common “success” variants as paid
+  if (['TXN_SUCCESS', 'SUCCESS', 'TXN_SUCCESSFUL'].includes(status)) return 'paid';
+  if (respCode === '01') return 'paid';
+
+  // Pending / in-progress
+  if (['PENDING', 'TXN_PENDING'].includes(status)) return 'pending';
+
+  // Everything else is a failure
   return 'failed';
 };
 
@@ -246,8 +260,8 @@ router.post('/paytm/callback', async (req, res) => {
       normalizedPayload.head.signature;
 
     if (hasJsonPayload) {
-      const body = normalizedPayload.body;
-      const head = normalizedPayload.head;
+      const body = normalizedPayload.body || {};
+      const head = normalizedPayload.head || {};
       const orderId = body.orderId || body.ORDERID || body.orderid;
 
       const isValid = PaytmChecksum.verifySignature(
@@ -267,9 +281,18 @@ router.post('/paytm/callback', async (req, res) => {
         return res.status(404).json({ success: false, message: 'Payment not found' });
       }
 
-      const resultInfo = body.resultInfo || body.RESULTINFO;
+      const resultInfo = body.resultInfo || body.RESULTINFO || {};
       const newStatus = mapPaytmStatus(
-        resultInfo?.resultStatus || body.STATUS
+        // Paytm may send status in multiple casings/fields
+        resultInfo?.resultStatus ||
+          body.STATUS ||
+          body.status ||
+          body.Status,
+        // And resp code similarly
+        resultInfo?.resultCode ||
+          body.RESPCODE ||
+          body.respcode ||
+          body.respCode
       );
 
       payment.status = newStatus;
@@ -313,7 +336,7 @@ router.post('/paytm/callback', async (req, res) => {
         return res.status(404).json({ success: false, message: 'Payment not found' });
       }
 
-      const newStatus = mapPaytmStatus(normalized.STATUS);
+      const newStatus = mapPaytmStatus(normalized.STATUS, normalized.RESPCODE);
       payment.status = newStatus;
       payment.paytm = {
         ...payment.paytm,
