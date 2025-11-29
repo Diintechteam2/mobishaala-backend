@@ -14,6 +14,7 @@ const PAYTM_WEBSITE =
   process.env.PAYTM_WEBSITE ||
   (PAYTM_ENV === 'production' ? 'DEFAULT' : 'WEBSTAGING');
 const APP_BASE_URL = (process.env.APP_BASE_URL || 'https://mobishaala-backend-zcxm.onrender.com').replace(/\/$/, '');
+const FRONTEND_BASE_URL = (process.env.FRONTEND_BASE_URL || 'https://mobishaala.com').replace(/\/$/, '');
 const PAYTM_CALLBACK_URL =
   process.env.PAYTM_CALLBACK_URL || `${APP_BASE_URL}/api/payments/paytm/callback`;
 const PAYTM_HOST =
@@ -360,20 +361,31 @@ router.post('/paytm/callback', async (req, res) => {
   }
 });
 
-// Handle GET requests to callback (some gateways send GET after POST)
+// Handle GET requests to callback (user browser redirect after Paytm)
 router.get('/paytm/callback', async (req, res) => {
   try {
     const { orderId } = req.query;
-    if (orderId) {
-      const payment = await Payment.findOne({ orderId });
-      if (payment) {
-        return res.json({ success: true, orderId, status: payment.status });
-      }
+
+    if (!orderId) {
+      return res.status(400).send('Missing orderId');
     }
-    return res.status(404).json({ success: false, message: 'Payment not found' });
+
+    const payment = await Payment.findOne({ orderId });
+    if (!payment) {
+      // If payment not found, send user to a generic error page on frontend
+      const errorUrl = `${FRONTEND_BASE_URL}/payment-error?orderId=${encodeURIComponent(orderId)}`;
+      return res.redirect(errorUrl);
+    }
+
+    // Redirect back to the React checkout page, which will handle showing success/failure UI
+    const redirectUrl = `${FRONTEND_BASE_URL}/institutes/${encodeURIComponent(
+      payment.instituteId
+    )}/checkout/${encodeURIComponent(payment.courseId)}?orderId=${encodeURIComponent(orderId)}`;
+
+    return res.redirect(redirectUrl);
   } catch (error) {
     console.error('Paytm callback GET error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Callback error' });
+    return res.status(500).send('Callback error');
   }
 });
 
