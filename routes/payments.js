@@ -14,7 +14,7 @@ const PAYTM_WEBSITE =
   process.env.PAYTM_WEBSITE ||
   (PAYTM_ENV === 'production' ? 'DEFAULT' : 'WEBSTAGING');
 const APP_BASE_URL = (process.env.APP_BASE_URL || 'https://mobishaala-backend-zcxm.onrender.com').replace(/\/$/, '');
-const FRONTEND_BASE_URL = (process.env.FRONTEND_BASE_URL || 'https://mobishaala.com').replace(/\/$/, '');
+const FRONTEND_BASE_URL = (process.env.FRONTEND_BASE_URL || 'https://mobishaala-xi.vercel.app').replace(/\/$/, '');
 const PAYTM_CALLBACK_URL =
   process.env.PAYTM_CALLBACK_URL || `${APP_BASE_URL}/api/payments/paytm/callback`;
 const PAYTM_HOST =
